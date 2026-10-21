@@ -7,126 +7,77 @@
     <style>
         body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f4f9; color: #333; }
         h1 { color: #004b87; }
-        .loading { font-style: italic; color: #666; background: #e2ebf4; padding: 10px; border-radius: 4px; }
+        .loading { font-style: italic; color: #666; background: #e2ebf4; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
         .glosowanie { background: white; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .tytul { font-weight: bold; font-size: 1.1em; margin-bottom: 5px; }
         .meta { color: #666; font-size: 0.9em; }
         .wynik { margin-top: 8px; font-weight: bold; }
-        .wyszukiwarka { margin: 20px 0; padding: 15px; background: #e2ebf4; border-radius: 5px; }
-        input, button { padding: 8px; font-size: 1em; border-radius: 4px; border: 1px solid #ccc; }
-        button { background-color: #004b87; color: white; cursor: pointer; border: none; }
-        button:hover { background-color: #003366; }
-        .glos-posla { margin-top: 8px; padding: 5px; background: #fff3cd; border-left: 5px solid #ffc107; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <h1>Wyniki głosowań w Sejmie</h1>
-    <p>Dane pobierane bezpiecznie z oficjalnego API Sejmu RP.</p>
+    <p>Dane pobierane na żywo z oficjalnego API Sejmu RP przy użyciu niezależnego tunelu.</p>
     
-    <div class="wyszukiwarka">
-        <label for="input-posel"><strong>Sprawdź głos posła (Imię Nazwisko):</strong> </label>
-        <input type="text" id="input-posel" placeholder="np. Donald Tusk">
-        <button onclick="pobierzGlosowania()">Szukaj i odśwież</button>
-    </div>
-
-    <div id="status" class="loading">Inicjalizacja bezpiecznego połączenia...</div>
+    <div id="status" class="loading">Pobieranie najnowszych danych z Sejmu...</div>
     <div id="lista-glosowan"></div>
 
     <script>
-        // Bardzo stabilne i proste proxy CORS
-        const PROXY_URL = 'https://allorigins.win';
-        const SEJM_API = 'https://api.sejm.gov.pl/sejm/term10';
+        // Najbardziej niezawodne, publiczne i darmowe proxy CORS do ominięcia blokad Sejmu
+        const PROXY = "https://allorigins.win";
+        const TARGET_API = "https://api.sejm.gov.pl/sejm/term10/votings";
 
-        async function pobierzGlosowania() {
-            const imieNazwiskoPosla = document.getElementById('input-posel').value.trim();
-            const kontener = document.getElementById('lista-glosowan');
+        async function ladujDane() {
             const statusDiv = document.getElementById('status');
+            const kontener = document.getElementById('lista-glosowan');
             
-            statusDiv.innerText = 'Pobieranie danych o głosowaniach z Sejmu...';
-            kontener.innerHTML = '';
-
             try {
-                // Łączymy się z listą głosowań przez proxy
-                const celZgloszenia = SEJM_API + '/votings';
-                const urlZapytania = PROXY_URL + encodeURIComponent(celZgloszenia);
+                // Łączymy bezpiecznie przez zewnętrzny serwer proxy
+                const url = PROXY + encodeURIComponent(TARGET_API);
+                const res = await fetch(url);
                 
-                const response = await fetch(urlZapytania);
-                if (!response.ok) throw new Error('Błąd serwera proxy');
+                if (!res.ok) throw new Error("Błąd serwera pośredniczącego");
                 
-                const wrapper = await response.json();
-                const glosowania = JSON.parse(wrapper.contents);
+                const wrapper = await res.json();
+                // Dekodujemy tekst zwrotny z serwera Sejmu bezpośrednio na tablicę obiektów
+                const dane = JSON.parse(wrapper.contents);
 
-                if (!glosowania || glosowania.length === 0) {
-                    statusDiv.innerText = 'Nie znaleziono żadnych głosowań.';
+                if (!dane || dane.length === 0) {
+                    statusDiv.innerText = "Serwer Sejmu nie zwrócił żadnych głosowań.";
                     return;
                 }
 
-                statusDiv.innerText = `Pomyślnie załadowano listę! Wyświetlanie 15 najnowszych głosowań.`;
-                
-                // Sortujemy od najnowszego numeru głosowania
-                const ostatnieGlosowania = [...glosowania].sort((a,b) => b.votingNumber - a.votingNumber).slice(0, 15);
+                statusDiv.innerText = "Pomyślnie pobrano najnowsze dane! Wyświetlamy 15 ostatnich głosowań.";
 
-                for (const g of ostatnieGlosowania) {
+                // Sortujemy od najnowszego głosowania (wyższy numer) i bierzemy 15 pierwszych
+                const najnowsze = [...dane].sort((a, b) => b.votingNumber - a.votingNumber).slice(0, 15);
+
+                najnowsze.forEach(g => {
                     const div = document.createElement('div');
                     div.className = 'glosowanie';
-                    const dataGlosowania = g.date ? new Date(g.date).toLocaleString('pl-PL') : 'Brak daty';
-
-                    let htmlGlosuPosla = '';
-
-                    // Jeśli użytkownik wpisał posła, odpytujemy o szczegóły konkretnego głosowania
-                    if (imieNazwiskoPosla) {
-                        try {
-                            const szczegolyCel = SEJM_API + '/votings/' + g.proceedingNo + '/' + g.votingNumber;
-                            const szczegolyUrl = PROXY_URL + encodeURIComponent(szczegolyCel);
-                            
-                            const szczegolyResponse = await fetch(szczegolyUrl);
-                            if (szczegolyResponse.ok) {
-                                const szczegolyWrapper = await szczegolyResponse.json();
-                                const szczegoly = JSON.parse(szczegolyWrapper.contents);
-                                
-                                const znalezionyPosel = szczegoly.votes?.find(v => 
-                                    (v.firstName + ' ' + v.lastName).toLowerCase() === imieNazwiskoPosla.toLowerCase()
-                                );
-
-                                if (znalezionyPosel) {
-                                    let gv = znalezionyPosel.vote;
-                                    if(gv === 'YES') gv = 'ZA';
-                                    if(gv === 'NO') gv = 'PRZECIW';
-                                    if(gv === 'ABSTAIN') gv = 'WSTRZYMAŁ(A) SIĘ';
-                                    if(gv === 'VOTE_VALID_NO_VOTE') gv = 'NIE GŁOSOWAŁ(A)';
-                                    
-                                    htmlGlosuPosla = `<div class="glos-posla">Poseł ${imieNazwiskoPosla} zagłosował: ${gv}</div>`;
-                                } else {
-                                    htmlGlosuPosla = `<div class="glos-posla" style="background:#f8d7da; border-color:#dc3545;">Nie znaleziono posła w tym głosowaniu.</div>`;
-                                }
-                            }
-                        } catch (e) {
-                            console.log("Nie udało się pobrać szczegółu dla jednego elementu");
-                        }
-                    }
+                    
+                    const dataFormat = g.date ? new Date(g.date).toLocaleString('pl-PL') : 'Brak daty';
 
                     div.innerHTML = `
-                        <div class="tytul">${g.topic || 'Głosowanie ustawowe / porządkowe'}</div>
-                        <div class="meta">Posiedzenie nr: ${g.proceedingNo} | Głosowanie nr: ${g.votingNumber} | Data: ${dataGlosowania}</div>
+                        <div class="tytul">${g.topic || 'Głosowanie robocze / techniczne'}</div>
+                        <div class="meta">Posiedzenie nr: ${g.proceedingNo} | Głosowanie nr: ${g.votingNumber} | Data: ${dataFormat}</div>
                         <div class="wynik">
-                            Ogólny wynik: <span style="color: green;">Za: ${g.yes || 0}</span> | 
+                            Wyniki: <span style="color: green;">Za: ${g.yes || 0}</span> | 
                             <span style="color: red;">Przeciw: ${g.no || 0}</span> | 
                             <span style="color: orange;">Wstrzymało się: ${g.abstain || 0}</span>
                         </div>
-                        ${htmlGlosuPosla}
                     `;
                     kontener.appendChild(div);
-                }
+                });
 
-            } catch (blad) {
-                console.error(blad);
-                statusDiv.innerText = 'Nie udało się pobrać danych. Serwer pośredniczący jest przeciążony, spróbuj odświeżyć stronę za moment.';
+            } catch (err) {
+                console.error(err);
+                statusDiv.innerText = "Nie udało się wyświetlić danych. Spróbuj za moment.";
             }
         }
 
-        // Uruchomienie przy starcie
-        pobierzGlosowania();
+        // Wywołujemy funkcję natychmiast po załadowaniu skryptu
+        ladujDane();
     </script>
 </body>
 </html>
