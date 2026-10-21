@@ -22,7 +22,7 @@
 <body>
 
     <h1>Wyniki głosowań w Sejmie</h1>
-    <p>Dane pobierane bezpiecznie z oficjalnego API Sejmu.</p>
+    <p>Dane pobierane bezpiecznie z oficjalnego API Sejmu RP.</p>
     
     <div class="wyszukiwarka">
         <label for="input-posel"><strong>Sprawdź głos posła (Imię Nazwisko):</strong> </label>
@@ -34,27 +34,27 @@
     <div id="lista-glosowan"></div>
 
     <script>
-        // Używamy darmowego serwera proxy allorigins, który pozwala ominąć blokadę CORS Sejmu
+        // Bardzo stabilne i proste proxy CORS
         const PROXY_URL = 'https://allorigins.win';
-        const SEJM_API = 'https://sejm.gov.pl';
+        const SEJM_API = 'https://api.sejm.gov.pl/sejm/term10';
 
         async function pobierzGlosowania() {
             const imieNazwiskoPosla = document.getElementById('input-posel').value.trim();
             const kontener = document.getElementById('lista-glosowan');
             const statusDiv = document.getElementById('status');
             
-            statusDiv.className = 'loading';
-            statusDiv.innerText = 'Pobieranie danych przez bezpieczny tunel proxy...';
+            statusDiv.innerText = 'Pobieranie danych o głosowaniach z Sejmu...';
             kontener.innerHTML = '';
 
             try {
-                // Zapytanie przechodzi przez serwer proxy, który pakuje odpowiedź w obiekt JSON
-                const urlZapyatnia = `${PROXY_URL}${encodeURIComponent(SEJM_API + '/votings')}`;
-                const response = await fetch(urlZapyatnia);
-                if (!response.ok) throw new Error('Problem z serwerem proxy');
+                // Łączymy się z listą głosowań przez proxy
+                const celZgloszenia = SEJM_API + '/votings';
+                const urlZapytania = PROXY_URL + encodeURIComponent(celZgloszenia);
+                
+                const response = await fetch(urlZapytania);
+                if (!response.ok) throw new Error('Błąd serwera proxy');
                 
                 const wrapper = await response.json();
-                // Dane z Sejmu znajdują się w polu 'contents' jako tekst, musimy je zmienić na obiekt JavaScript
                 const glosowania = JSON.parse(wrapper.contents);
 
                 if (!glosowania || glosowania.length === 0) {
@@ -62,9 +62,9 @@
                     return;
                 }
 
-                statusDiv.innerText = `Pomyślnie załadowano listę głosowań! (Wyświetlanie 15 najnowszych)`;
+                statusDiv.innerText = `Pomyślnie załadowano listę! Wyświetlanie 15 najnowszych głosowań.`;
                 
-                // Sortujemy, żeby najnowsze numery głosowań były na samej górze
+                // Sortujemy od najnowszego numeru głosowania
                 const ostatnieGlosowania = [...glosowania].sort((a,b) => b.votingNumber - a.votingNumber).slice(0, 15);
 
                 for (const g of ostatnieGlosowania) {
@@ -74,17 +74,19 @@
 
                     let htmlGlosuPosla = '';
 
-                    // Jeśli wpisano posła, dociągamy szczegóły tego konkretnego głosowania również przez proxy
+                    // Jeśli użytkownik wpisał posła, odpytujemy o szczegóły konkretnego głosowania
                     if (imieNazwiskoPosla) {
                         try {
-                            const szczegolyUrl = `${PROXY_URL}${encodeURIComponent(`\${SEJM_API}/votings/g.proceedingNo/{g.votingNumber}`)}`;
+                            const szczegolyCel = SEJM_API + '/votings/' + g.proceedingNo + '/' + g.votingNumber;
+                            const szczegolyUrl = PROXY_URL + encodeURIComponent(szczegolyCel);
+                            
                             const szczegolyResponse = await fetch(szczegolyUrl);
                             if (szczegolyResponse.ok) {
                                 const szczegolyWrapper = await szczegolyResponse.json();
                                 const szczegoly = JSON.parse(szczegolyWrapper.contents);
                                 
                                 const znalezionyPosel = szczegoly.votes?.find(v => 
-                                    `${v.firstName} ${v.lastName}`.toLowerCase() === imieNazwiskoPosla.toLowerCase()
+                                    (v.firstName + ' ' + v.lastName).toLowerCase() === imieNazwiskoPosla.toLowerCase()
                                 );
 
                                 if (znalezionyPosel) {
@@ -100,12 +102,12 @@
                                 }
                             }
                         } catch (e) {
-                            console.log("Pominięto szczegóły głosu dla tego kafelka ze względu na limit czasu połączenia");
+                            console.log("Nie udało się pobrać szczegółu dla jednego elementu");
                         }
                     }
 
                     div.innerHTML = `
-                        <div class="tytul">${g.topic || 'Głosowanie porządkowe / techniczne'}</div>
+                        <div class="tytul">${g.topic || 'Głosowanie ustawowe / porządkowe'}</div>
                         <div class="meta">Posiedzenie nr: ${g.proceedingNo} | Głosowanie nr: ${g.votingNumber} | Data: ${dataGlosowania}</div>
                         <div class="wynik">
                             Ogólny wynik: <span style="color: green;">Za: ${g.yes || 0}</span> | 
@@ -119,11 +121,11 @@
 
             } catch (blad) {
                 console.error(blad);
-                statusDiv.innerText = 'Wystąpił problem z połączeniem proxy. Odśwież stronę za chwilę.';
+                statusDiv.innerText = 'Nie udało się pobrać danych. Serwer pośredniczący jest przeciążony, spróbuj odświeżyć stronę za moment.';
             }
         }
 
-        // Start po otwarciu strony
+        // Uruchomienie przy starcie
         pobierzGlosowania();
     </script>
 </body>
