@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Głosowań Sejmowych</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f4f9; color: #333; }
+        h1 { color: #004b87; }
+        .loading { font-style: italic; color: #666; }
+        .glosowanie { background: white; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .tytul { font-weight: bold; font-size: 1.1em; margin-bottom: 5px; }
+        .meta { color: #666; font-size: 0.9em; }
+        .wynik { margin-top: 8px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Wyniki głosowań w Sejmie</h1>
+    <p>Dane pobierane na żywo z oficjalnego <a href="https://sejm.gov.pl" target="_blank">API Sejmu</a>.</p>
+    
+    <div id="status" class="loading">Pobieranie danych z Sejmu...</div>
+    <div id="lista-glosowan"></div>
+
+    <script>
+        // Adres oficjalnego API Sejmu dla X kadencji (obecnej)
+        const API_URL = 'https://sejm.gov.pl/sejm/term10';
+
+        async function pobierzGlosowania() {
+            try {
+                // 1. Najpierw pobieramy listę posiedzeń, żeby dowiedzieć się, które jest najnowsze
+                const posiedzeniaResponse = await fetch(`${API_URL}/proceedings`);
+                const posiedzenia = await posiedzeniaResponse.json();
+                
+                // Bierzemy ostatnie posiedzenie z listy
+                const ostatniePosiedzenie = posiedzenia[posiedzenia.length - 1];
+                const numerPosiedzenia = ostatniePosiedzenie.number;
+
+                document.getElementById('status').innerText = `Posiedzenie nr ${numerPosiedzenia}. Pobieranie głosowań...`;
+
+                // 2. Pobieramy głosowania z tego konkretnego posiedzenia
+                const glosowaniaResponse = await fetch(`${API_URL}/proceedings/${numerPosiedzenia}/votings`);
+                const glosowania = await glosowaniaResponse.json();
+
+                // Czyszczenie statusu ładowania
+                document.getElementById('status').innerText = `Najnowsze posiedzenie nr ${numerPosiedzenia} (Liczba głosowań: ${glosowania.length})`;
+
+                const kontener = document.getElementById('lista-glosowan');
+                kontener.innerHTML = ''; // Wyczyszczenie listy
+
+                // 3. Wyświetlamy głosowania na stronie (pokazujemy 20 najnowszych)
+                const ostatnieGlosowania = glosowania.reverse().slice(0, 20);
+
+                ostatnieGlosowania.forEach(g => {
+                    const div = document.createElement('div');
+                    div.className = 'glosowanie';
+                    
+                    // Formatowanie daty i czasu
+                    const dataGlosowania = new Date(g.date).toLocaleString('pl-PL');
+
+                    div.innerHTML = `
+                        <div class="tytul">${g.topic || 'Brak tytułu / Głosowanie porządkowe'}</div>
+                        <div class="meta">Głosowanie nr: ${g.votingNumber} | Data: ${dataGlosowania}</div>
+                        <div class="wynik">
+                            Wynik: <span style="color: green;">Za: ${g.yes}</span> | 
+                            <span style="color: red;">Przeciw: ${g.no}</span> | 
+                            <span style="color: orange;">Wstrzymało się: ${g.abstain}</span>
+                        </div>
+                    `;
+                    kontener.appendChild(div);
+                });
+
+            } catch (blad) {
+                console.error(blad);
+                document.getElementById('status').innerText = 'Wystąpił błąd podczas pobierania danych. Spróbuj odświeżyć stronę.';
+            }
+        }
+
+        // Uruchomienie funkcji po załadowaniu strony
+        pobierzGlosowania();
+    </script>
+</body>
+</html>
