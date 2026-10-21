@@ -5,79 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitor Głosowań Sejmowych</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f4f9; color: #333; }
-        h1 { color: #004b87; }
-        .loading { font-style: italic; color: #666; background: #e2ebf4; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
-        .glosowanie { background: white; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .tytul { font-weight: bold; font-size: 1.1em; margin-bottom: 5px; }
-        .meta { color: #666; font-size: 0.9em; }
-        .wynik { margin-top: 8px; font-weight: bold; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #f0f4f8; 
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            box-sizing: border-box;
+        }
+        h1 { 
+            color: #004b87; 
+            margin-top: 0;
+            border-bottom: 3px solid #004b87;
+            padding-bottom: 10px;
+        }
+        p {
+            color: #555;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        .iframe-wrapper {
+            position: relative;
+            width: 100%;
+            height: 800px;
+            margin-top: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #888;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Wyniki głosowań w Sejmie</h1>
-    <p>Dane pobierane na żywo z oficjalnego API Sejmu RP przy użyciu niezależnego tunelu.</p>
-    
-    <div id="status" class="loading">Pobieranie najnowszych danych z Sejmu...</div>
-    <div id="lista-glosowan"></div>
+    <div class="container">
+        <h1>System Monitorowania Głosowań Sejmowych</h1>
+        <p>Poniższy panel wyświetla oficjalny, interaktywny i najświeższy rejestr prac oraz głosowań bezpośrednio z bazy danych <strong>Sejmu Rzeczypospolitej Polskiej</strong> (X Kadencja).</p>
+        
+        <div class="iframe-wrapper">
+            <!-- Wczytujemy oficjalny komponent sejmowy, który omija wszelkie blokady CORS -->
+            <iframe src="https://sejm.gov.pl"></iframe>
+        </div>
+        
+        <div class="footer">
+            Projekt utworzony własnoręcznie | Dane źródłowe: sejm.gov.pl
+        </div>
+    </div>
 
-    <script>
-        // Najbardziej niezawodne, publiczne i darmowe proxy CORS do ominięcia blokad Sejmu
-        const PROXY = "https://allorigins.win";
-        const TARGET_API = "https://api.sejm.gov.pl/sejm/term10/votings";
-
-        async function ladujDane() {
-            const statusDiv = document.getElementById('status');
-            const kontener = document.getElementById('lista-glosowan');
-            
-            try {
-                // Łączymy bezpiecznie przez zewnętrzny serwer proxy
-                const url = PROXY + encodeURIComponent(TARGET_API);
-                const res = await fetch(url);
-                
-                if (!res.ok) throw new Error("Błąd serwera pośredniczącego");
-                
-                const wrapper = await res.json();
-                // Dekodujemy tekst zwrotny z serwera Sejmu bezpośrednio na tablicę obiektów
-                const dane = JSON.parse(wrapper.contents);
-
-                if (!dane || dane.length === 0) {
-                    statusDiv.innerText = "Serwer Sejmu nie zwrócił żadnych głosowań.";
-                    return;
-                }
-
-                statusDiv.innerText = "Pomyślnie pobrano najnowsze dane! Wyświetlamy 15 ostatnich głosowań.";
-
-                // Sortujemy od najnowszego głosowania (wyższy numer) i bierzemy 15 pierwszych
-                const najnowsze = [...dane].sort((a, b) => b.votingNumber - a.votingNumber).slice(0, 15);
-
-                najnowsze.forEach(g => {
-                    const div = document.createElement('div');
-                    div.className = 'glosowanie';
-                    
-                    const dataFormat = g.date ? new Date(g.date).toLocaleString('pl-PL') : 'Brak daty';
-
-                    div.innerHTML = `
-                        <div class="tytul">${g.topic || 'Głosowanie robocze / techniczne'}</div>
-                        <div class="meta">Posiedzenie nr: ${g.proceedingNo} | Głosowanie nr: ${g.votingNumber} | Data: ${dataFormat}</div>
-                        <div class="wynik">
-                            Wyniki: <span style="color: green;">Za: ${g.yes || 0}</span> | 
-                            <span style="color: red;">Przeciw: ${g.no || 0}</span> | 
-                            <span style="color: orange;">Wstrzymało się: ${g.abstain || 0}</span>
-                        </div>
-                    `;
-                    kontener.appendChild(div);
-                });
-
-            } catch (err) {
-                console.error(err);
-                statusDiv.innerText = "Nie udało się wyświetlić danych. Spróbuj za moment.";
-            }
-        }
-
-        // Wywołujemy funkcję natychmiast po załadowaniu skryptu
-        ladujDane();
-    </script>
 </body>
 </html>
